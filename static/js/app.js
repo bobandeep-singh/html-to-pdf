@@ -31,6 +31,9 @@ class HTMLToPDFConverter {
         // Download All button
         document.getElementById('downloadAllBtn').addEventListener('click', () => this.downloadAllPDFs());
         
+        // Clear Session button
+        document.getElementById('clearSessionBtn').addEventListener('click', () => this.clearSession());
+        
         // Enter key support for folder input
         document.getElementById('folderPath').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
@@ -311,7 +314,7 @@ class HTMLToPDFConverter {
             </div>
         `;
 
-        // Show download all button if there are successful conversions
+        // Show download all button for server-based conversions
         if (stats.successful > 0) {
             downloadAllSection.style.display = 'block';
         }
@@ -377,7 +380,7 @@ class HTMLToPDFConverter {
             </div>
         `;
 
-        // Show download all button if there are successful conversions
+        // Show download all button for successful conversions (both browser uploads and server scanning)
         if (stats.successful > 0) {
             downloadAllSection.style.display = 'block';
         }
@@ -565,6 +568,70 @@ class HTMLToPDFConverter {
         }
 
         this.hideLoading();
+    }
+
+    async clearSession() {
+        if (!confirm('Are you sure you want to start fresh? This will clear all current data and conversions.')) {
+            return;
+        }
+
+        this.showLoading('Clearing session...');
+
+        try {
+            const response = await fetch('/api/clear-session', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                // Reset client state
+                this.currentState = {
+                    folderPath: '',
+                    htmlFiles: [],
+                    conversions: [],
+                    outputDir: ''
+                };
+
+                // Reset UI
+                this.resetUI();
+                this.showToast('success', 'Session cleared successfully. You can start fresh now.');
+            } else {
+                this.showToast('error', data.error || 'Failed to clear session');
+            }
+        } catch (error) {
+            this.showToast('error', `Network error: ${error.message}`);
+        }
+
+        this.hideLoading();
+    }
+
+    resetUI() {
+        // Clear form inputs
+        document.getElementById('folderPath').value = '';
+        
+        // Clear results containers
+        document.getElementById('scanResults').innerHTML = '';
+        document.getElementById('conversionStats').innerHTML = '';
+        document.getElementById('resultsContainer').innerHTML = '';
+        
+        // Hide download all section
+        document.getElementById('downloadAllSection').style.display = 'none';
+        
+        // Reset steps to initial state
+        this.activateStep(1);
+        
+        // Reset step cards
+        document.querySelectorAll('.step-card').forEach(card => {
+            card.classList.remove('active', 'completed');
+        });
+        document.getElementById('step1').classList.add('active');
+        
+        // Enable/disable buttons
+        document.getElementById('convertBtn').disabled = false;
     }
 
     toggleConversion(index) {

@@ -9,7 +9,7 @@ import tempfile
 import shutil
 import zipfile
 from pathlib import Path
-from flask import Flask, render_template, request, jsonify, send_file
+from flask import Flask, render_template, request, jsonify, send_file, session
 from flask_cors import CORS
 
 from html_finder import HTMLFileFinder
@@ -17,15 +17,26 @@ from pdf_converter import PDFConverter
 from config import Config
 
 app = Flask(__name__)
+app.secret_key = 'html-to-pdf-converter-secret-key-change-in-production'
 CORS(app)
 
-# Global variables to store conversion state
-current_conversion = {
-    'base_path': None,
-    'html_files': [],
-    'conversions': [],
-    'output_dir': None
-}
+def get_current_conversion():
+    """Get current conversion state from session"""
+    if 'current_conversion' not in session:
+        session['current_conversion'] = {
+            'base_path': None,
+            'html_files': [],
+            'conversions': [],
+            'output_dir': None
+        }
+    return session['current_conversion']
+
+def update_current_conversion(updates):
+    """Update current conversion state in session"""
+    current = get_current_conversion()
+    current.update(updates)
+    session['current_conversion'] = current
+    session.modified = True
 
 @app.route('/')
 def index():
@@ -57,10 +68,13 @@ def scan_folder():
                 'size': html_file.stat().st_size if html_file.exists() else 0
             })
         
-        # Update global state
-        current_conversion['base_path'] = folder_path
-        current_conversion['html_files'] = file_list
-        current_conversion['output_dir'] = str(Config.get_output_dir(folder_path))
+        # Update session state
+        update_current_conversion({
+            'base_path': folder_path,
+            'html_files': file_list,
+            'output_dir': str(Config.get_output_dir(folder_path))
+        })
+        current_conversion = get_current_conversion()
         
         return jsonify({
             'success': True,
@@ -77,6 +91,7 @@ def scan_folder():
 def convert_files():
     """Convert all HTML files to PDF"""
     try:
+        current_conversion = get_current_conversion()
         if not current_conversion['base_path'] or not current_conversion['html_files']:
             return jsonify({'error': 'No files to convert. Please scan a folder first.'}), 400
         
@@ -105,8 +120,8 @@ def convert_files():
             
             conversions.append(conversion_result)
         
-        # Update global state
-        current_conversion['conversions'] = conversions
+        # Update session state
+        update_current_conversion({'conversions': conversions})
         
         # Calculate statistics
         successful = sum(1 for c in conversions if c['success'])
@@ -171,10 +186,18 @@ def upload_and_convert():
         if not files:
             return jsonify({'error': 'No files selected'}), 400
         
+        # Create session-specific directory for storing PDFs
+        session_id = session.get('session_id', os.urandom(16).hex())
+        session['session_id'] = session_id
+        
+        session_temp_dir = Path(tempfile.gettempdir()) / 'html_to_pdf_sessions' / session_id
+        session_temp_dir.mkdir(parents=True, exist_ok=True)
+        
         # Create temporary directory for processing
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
-            output_dir = temp_path / "output"
+            output_dir = session_temp_dir / "pdfs"  # Store PDFs in session directory
+            output_dir.mkdir(exist_ok=True)
             
             # Save uploaded files and extract root folder name
             html_files = []
@@ -206,8 +229,11 @@ def upload_and_convert():
                         'size': file_path.stat().st_size
                     })
             
-            # Update global state with root folder information
-            current_conversion['base_path'] = root_folder_name or "uploaded_files"
+            # Update session state with root folder information
+            update_current_conversion({
+                'base_path': root_folder_name or "uploaded_files",
+                'session_temp_dir': str(session_temp_dir)
+            })
             
             if not html_files:
                 return jsonify({'error': 'No HTML files found in upload'}), 400
@@ -220,7 +246,7 @@ def upload_and_convert():
                 html_file_path = Path(file_info['absolute_path'])
                 relative_path = Path(file_info['relative_path'])
                 
-                # Generate PDF path
+                # Generate PDF path in session directory
                 pdf_path = pdf_converter.get_pdf_path(html_file_path, output_dir, relative_path)
                 
                 # Convert to PDF
@@ -235,15 +261,23 @@ def upload_and_convert():
                     'pdf_data': None
                 }
                 
-                # Read PDF data if successful
+                # Read PDF data if successful for immediate download
                 if success:
                     with open(pdf_path, 'rb') as pdf_file:
                         conversion_result['pdf_data'] = base64.b64encode(pdf_file.read()).decode('utf-8')
                 
                 conversions.append(conversion_result)
             
-            # Update global state for download functionality
-            current_conversion['conversions'] = conversions
+            # Store conversion info in session without the large PDF data but with PDF paths
+            conversions_for_session = []
+            for conv in conversions:
+                session_conv = conv.copy()
+                # Remove large base64 PDF data from session storage but keep the PDF path
+                if 'pdf_data' in session_conv:
+                    del session_conv['pdf_data']
+                conversions_for_session.append(session_conv)
+            
+            update_current_conversion({'conversions': conversions_for_session})
             
             # Calculate statistics
             successful = sum(1 for c in conversions if c['success'])
@@ -253,6 +287,7 @@ def upload_and_convert():
             return jsonify({
                 'success': True,
                 'conversions': conversions,
+                'is_browser_upload': True,  # Flag to indicate browser upload
                 'statistics': {
                     'total': len(conversions),
                     'successful': successful,
@@ -268,9 +303,9 @@ def upload_and_convert():
 def download_all_pdfs():
     """Create and download a ZIP file containing all converted PDFs with folder structure"""
     try:
+        current_conversion = get_current_conversion()
         print(f"Debug: current_conversion state: {current_conversion}")
         print(f"Debug: conversions count: {len(current_conversion.get('conversions', []))}")
-        
         if not current_conversion.get('conversions') or len(current_conversion['conversions']) == 0:
             return jsonify({'error': 'No conversions available for download'}), 400
         
@@ -285,23 +320,19 @@ def download_all_pdfs():
             with zipfile.ZipFile(temp_zip.name, 'w', zipfile.ZIP_DEFLATED) as zipf:
                 
                 for conversion in successful_conversions:
-                    # For browser-uploaded files, use the PDF data
-                    if conversion.get('pdf_data'):
-                        # Decode base64 PDF data
-                        pdf_data = base64.b64decode(conversion['pdf_data'])
-                        
-                        # Create the file path within the ZIP maintaining directory structure
-                        zip_path = conversion['html_file']['relative_path'].replace('.html', '.pdf').replace('.htm', '.pdf')
-                        
-                        # Add PDF to ZIP
-                        zipf.writestr(zip_path, pdf_data)
+                    pdf_path = conversion.get('pdf_path')
+                    zip_path = conversion['relative_pdf_path']
                     
-                    # For server files, read from the actual PDF file
-                    elif conversion.get('pdf_path') and os.path.exists(conversion['pdf_path']):
-                        zip_path = conversion['relative_pdf_path']
-                        zipf.write(conversion['pdf_path'], zip_path)
+                    # Check if PDF file exists (works for both server files and session-stored files)
+                    if pdf_path and os.path.exists(pdf_path):
+                        zipf.write(pdf_path, zip_path)
+                    else:
+                        # This should not happen anymore with the new session storage approach
+                        print(f"Warning: PDF file not found: {pdf_path}")
+                        continue
         
         # Determine the ZIP filename based on the base folder
+        current_conversion = get_current_conversion()
         base_folder_name = current_conversion.get('base_path', 'converted_pdfs')
         if base_folder_name:
             zip_filename = f"{os.path.basename(base_folder_name)}_pdfs.zip"
@@ -333,7 +364,27 @@ def download_all_pdfs():
 @app.route('/api/current-state')
 def get_current_state():
     """Get current conversion state"""
-    return jsonify(current_conversion)
+    return jsonify(get_current_conversion())
+
+@app.route('/api/clear-session', methods=['POST'])
+def clear_session():
+    """Clear current session and start fresh"""
+    try:
+        # Clean up session directory if it exists
+        current_conversion = get_current_conversion()
+        session_temp_dir = current_conversion.get('session_temp_dir')
+        
+        if session_temp_dir and os.path.exists(session_temp_dir):
+            try:
+                shutil.rmtree(session_temp_dir)
+            except Exception as cleanup_error:
+                print(f"Warning: Failed to clean up session directory {session_temp_dir}: {cleanup_error}")
+        
+        # Clear session data
+        session.clear()
+        return jsonify({'success': True, 'message': 'Session cleared successfully'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=8080)
