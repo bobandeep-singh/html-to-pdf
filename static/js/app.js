@@ -672,12 +672,26 @@ class HTMLToPDFConverter {
         // Check if this is a browser-uploaded file (has pdf_data) or server file
         if (conversion.pdf_data) {
             // Browser-uploaded file - load from original file object and PDF data
-            const originalFile = this.currentState.htmlFiles.find(f => f.filename === conversion.html_file.filename);
+            // Try to find by exact filename match first
+            let originalFile = this.currentState.htmlFiles.find(f => f.filename === conversion.html_file.filename);
+            
+            // If not found, try to find by relative path
+            if (!originalFile) {
+                originalFile = this.currentState.htmlFiles.find(f => f.relative_path === conversion.html_file.relative_path);
+            }
+            
+            // If still not found, try by the original file name (last part of path)
+            if (!originalFile) {
+                const htmlFileName = conversion.html_file.filename.split('/').pop();
+                originalFile = this.currentState.htmlFiles.find(f => f.filename === htmlFileName);
+            }
             
             if (originalFile && originalFile.file_object) {
                 // Load HTML from original file object
                 const htmlUrl = URL.createObjectURL(originalFile.file_object);
                 htmlIframe.src = htmlUrl;
+            } else {
+                htmlIframe.src = 'data:text/html;charset=utf-8,<html><body><h3>HTML Preview Not Available</h3><p>Could not load original HTML file for preview.</p></body></html>';
             }
 
             // Load PDF from base64 data
