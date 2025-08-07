@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTML to PDF Converter</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/styles.css') }}" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1><i class="fas fa-file-pdf"></i> HTML to PDF Converter</h1>
+                <p>Convert your HTML files to PDF while maintaining directory structure</p>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Step 1: Folder Selection -->
+            <section class="card step-card active" id="step1">
+                <div class="card-header">
+                    <h2><i class="fas fa-folder-open"></i> Step 1: Select Root Folder</h2>
+                </div>
+                <div class="card-body">
+                    <div class="folder-input-section">
+                        <div class="input-group">
+                            <input type="text" id="folderPath" placeholder="Enter folder path or use the browse button" class="form-input">
+                            <button id="browseBtn" class="btn btn-secondary">
+                                <i class="fas fa-folder-open"></i> Browse
+                            </button>
+                        </div>
+                        <button id="scanBtn" class="btn btn-primary">
+                            <i class="fas fa-search"></i> Scan Folder
+                        </button>
+                    </div>
+                    <div class="help-text">
+                        <i class="fas fa-info-circle"></i>
+                        Select a folder containing HTML files. The converter will recursively find all HTML files and maintain the directory structure.
+                    </div>
+                </div>
+            </section>
+
+            <!-- Step 2: File Discovery -->
+            <section class="card step-card" id="step2">
+                <div class="card-header">
+                    <h2><i class="fas fa-list"></i> Step 2: Found HTML Files</h2>
+                    <div class="step-actions">
+                        <button id="convertBtn" class="btn btn-success">
+                            <i class="fas fa-magic"></i> Convert All to PDF
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="scan-results" id="scanResults">
+                        <!-- Results will be populated here -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Step 3: Conversion Results -->
+            <section class="card step-card" id="step3">
+                <div class="card-header">
+                    <h2><i class="fas fa-check-circle"></i> Step 3: Conversion Results</h2>
+                    <div class="conversion-stats" id="conversionStats">
+                        <!-- Stats will be populated here -->
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="download-all-section" id="downloadAllSection" style="display: none;">
+                        <div class="text-center mb-3">
+                            <button id="downloadAllBtn" class="btn btn-success btn-lg">
+                                <i class="fas fa-download"></i> Download All PDFs (ZIP)
+                            </button>
+                            <p class="mt-2 text-secondary">Download all converted PDFs in a ZIP file with original folder structure</p>
+                        </div>
+                    </div>
+                    <div class="results-container" id="resultsContainer">
+                        <!-- Conversion results will be populated here -->
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Loading Modal -->
+    <div class="modal" id="loadingModal">
+        <div class="modal-content">
+            <div class="spinner"></div>
+            <h3>Processing...</h3>
+            <p id="loadingMessage">Please wait while we process your request.</p>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div class="toast-container" id="toastContainer">
+        <!-- Toasts will be added here dynamically -->
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+xhtml2pdf==0.2.16
+click==8.1.7
+pathlib2==2.3.7
+colorama==0.4.6
+flask==3.0.0
+flask-cors==4.0.0
