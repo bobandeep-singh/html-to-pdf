@@ -427,7 +427,7 @@ class HTMLToPDFConverter {
                         HTML Preview
                     </div>
                     <div class="preview-content">
-                        <iframe class="html-preview" id="html-${index}" src="file://${conversion.html_file.absolute_path}"></iframe>
+                        <iframe class="html-preview" id="html-${index}" src="/api/serve-html/${encodeURIComponent(conversion.html_file.absolute_path)}"></iframe>
                     </div>
                 </div>
                 <div class="preview-panel">
@@ -692,23 +692,10 @@ class HTMLToPDFConverter {
             pdfIframe.src = pdfUrl;
             
         } else {
-            // Server file - load via API
+            // Server file - load via API endpoints
             try {
-                // Try to load as file:// URL first, fallback to API if needed
-                htmlIframe.onerror = async () => {
-                    // Fallback: load HTML content via API and display as text
-                    try {
-                        const response = await fetch(`/api/get-file-content/${encodeURIComponent(conversion.html_file.absolute_path)}`);
-                        const data = await response.json();
-                        if (data.success) {
-                            const blob = new Blob([data.content], { type: 'text/html' });
-                            const url = URL.createObjectURL(blob);
-                            htmlIframe.src = url;
-                        }
-                    } catch (error) {
-                        console.error('Error loading HTML preview:', error);
-                    }
-                };
+                // Load HTML via server endpoint
+                htmlIframe.src = `/api/serve-html/${encodeURIComponent(conversion.html_file.absolute_path)}`;
 
                 // Load PDF via server endpoint
                 if (pdfIframe) {

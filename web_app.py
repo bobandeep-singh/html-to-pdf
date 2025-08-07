@@ -162,6 +162,19 @@ def get_file_content(file_path):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/serve-html/<path:file_path>')
+def serve_html(file_path):
+    """Serve HTML file directly for iframe preview"""
+    try:
+        absolute_path = Path(file_path)
+        if not absolute_path.exists():
+            return jsonify({'error': 'HTML file not found'}), 404
+        
+        return send_file(absolute_path, mimetype='text/html')
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/serve-pdf/<path:pdf_path>')
 def serve_pdf(pdf_path):
     """Serve PDF file for preview"""
